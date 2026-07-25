@@ -8,7 +8,7 @@ https://www.python.org/downloads/
 
 Bước 1 : Mở roblox
 
-Bước 2 : Mở app
+Bước 2 : Mở main.py
 
 Bước 3 : Ấn nút inject
 
@@ -16,16 +16,16 @@ Bước 3 : Ấn nút inject
 
 Step 1: Open Roblox
 
-Step 2: Open the app
+Step 2: Open main.py
 
 Step 3: Press the inject button
 
 # FIX
 
-Nếu roblox không hoạt động bình thường vui lòng ấn "Kill Roblox" và không nên lạm dụng hay dùng quá nhiều
-Nếu app hoạt động bất thường hay không thể mở, vui lòng tải python và tải thư viện "psutil"
-Nên chạy app với quyền quản trị
+Nếu roblox không hoạt động bình thường vui lòng ấn "Kill Roblox" và không nên lạm dụng hay dùng quá nhiều.
+Nếu app hoạt động bất thường hay không thể mở, vui lòng tải python và tải thư viện "psutil" thủ công.
+Nên chạy app với quyền quản trị.
 
 If Roblox is not working properly, please press "Kill Roblox" and do not overuse or abuse it.
-If the app is malfunctioning or cannot open, please download Python and the "psutil" library.
+If the app malfunctions or fails to open, please download Python and manually load the "psutil" library.
 It is recommended to run the app with administrator privileges.
