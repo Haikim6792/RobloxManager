@@ -1,5 +1,6 @@
 import tkinter as tk
 import psutil
+from appfolder.hidecmd import hide_console
 
 # Target process names
 ROBLOX_PROCESSES = ["robloxplayerbeta.exe", "robloxapp.exe"]
@@ -34,6 +35,9 @@ class DarkRobloxManager(tk.Tk):
     def __init__(self):
         super().__init__()
 
+        # Hide command prompt as soon as Tkinter starts
+        hide_console()
+
         # Theme Colors
         self.BG_DARK = "#0f172a"
         self.CARD_BG = "#1e293b"
@@ -55,6 +59,7 @@ class DarkRobloxManager(tk.Tk):
         self.auto_detect_loop()
 
     def setup_ui(self):
+        # Header Container
         header_frame = tk.Frame(self, bg=self.BG_DARK)
         header_frame.pack(fill="x", padx=20, pady=(20, 10))
 
@@ -94,7 +99,7 @@ class DarkRobloxManager(tk.Tk):
         )
         self.status_text.pack(side="left")
 
-        # Action Buttons
+        # Action Buttons Container
         btn_frame = tk.Frame(self, bg=self.BG_DARK)
         btn_frame.pack(fill="x", padx=20, pady=10)
 
@@ -137,6 +142,7 @@ class DarkRobloxManager(tk.Tk):
         self.log_label.pack(side="bottom", pady=10)
 
     def auto_detect_loop(self):
+        """Periodically scans active background processes every 2 seconds."""
         is_running = check_is_running(ROBLOX_PROCESSES)
 
         if is_running:
