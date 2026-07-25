@@ -6,14 +6,12 @@ import urllib.request
 import zipfile
 import io
 
-# --- FIX WORKING DIRECTORY & IMPORT PATHS ---
-# Ensures relative paths and imports work even when launched as Administrator
+# Fix working directory & pathing
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 os.chdir(BASE_DIR)
 if BASE_DIR not in sys.path:
     sys.path.insert(0, BASE_DIR)
 
-# --- CONFIGURATION ---
 GITHUB_USER = "Haikim6792"
 REPO_NAME = "RobloxManager"
 BRANCH = "main"
@@ -22,9 +20,7 @@ GITHUB_REPO_URL = f"https://github.com/{GITHUB_USER}/{REPO_NAME}.git"
 ZIP_URL = f"https://github.com/{GITHUB_USER}/{REPO_NAME}/archive/refs/heads/{BRANCH}.zip"
 
 
-# --- 1. ADMIN AUTO-ELEVATION ---
 def is_admin():
-    """Checks if the script is running with Administrator privileges."""
     try:
         return ctypes.windll.shell32.IsUserAnAdmin()
     except Exception:
@@ -32,7 +28,6 @@ def is_admin():
 
 
 def run_as_admin():
-    """Relaunches the script with Administrator privileges via Windows UAC if needed."""
     if not is_admin():
         print("[+] Requesting Administrator privileges...")
         script = os.path.abspath(sys.argv[0])
@@ -48,9 +43,7 @@ def run_as_admin():
             print("[!] Admin privileges denied. Some process actions may fail.")
 
 
-# --- 2. WINGET HEALTH CHECK & AUTO-INSTALLER ---
 def is_winget_working():
-    """Tests if winget is available and responding correctly."""
     try:
         result = subprocess.run(
             ["winget", "--version"],
@@ -65,19 +58,17 @@ def is_winget_working():
 
 
 def install_or_repair_winget():
-    """Downloads and installs/reinstalls Microsoft AppInstaller (winget) via PowerShell."""
     print(" -> Winget is missing or corrupted. Attempting automatic installation/repair...")
-    
     winget_msix_url = "https://github.com/microsoft/winget-cli/releases/latest/download/Microsoft.DesktopAppInstaller_8wekyb3d8bbwe.msixbundle"
     temp_installer_path = os.path.join(os.environ.get("TEMP", "C:\\Windows\\Temp"), "winget_installer.msixbundle")
 
     try:
-        print(" -> Downloading Winget package from official source...")
+        print(" -> Downloading Winget package...")
         req = urllib.request.Request(winget_msix_url, headers={'User-Agent': 'Mozilla/5.0'})
         with urllib.request.urlopen(req) as response, open(temp_installer_path, "wb") as out_file:
             out_file.write(response.read())
 
-        print(" -> Installing Winget via PowerShell Add-AppxPackage...")
+        print(" -> Installing Winget via PowerShell...")
         ps_command = f'Add-AppxPackage -Path "{temp_installer_path}" -ForceApplicationShutdown'
         subprocess.run(["powershell", "-Command", ps_command], check=True)
         
@@ -93,14 +84,12 @@ def install_or_repair_winget():
         return False
 
 
-# --- 3. AUTOMATIC GIT INSTALLER ---
 def try_install_git():
-    """Ensures Winget is working, then uses Winget to install Git."""
     if not is_winget_working():
         if not install_or_repair_winget():
             return False
 
-    print(" -> Installing Git executable via Winget...")
+    print(" -> Installing Git via Winget...")
     try:
         cmd = [
             "winget", "install", "--id", "Git.Git",
@@ -121,9 +110,7 @@ def try_install_git():
         return False
 
 
-# --- 4. AUTOMATIC FILE DOWNLOAD & SYNC ---
 def download_zip_fallback():
-    """Downloads repository as a ZIP archive if Git is unavailable."""
     print(" -> Downloading repository archive directly via HTTPS...")
     try:
         req = urllib.request.Request(ZIP_URL, headers={'User-Agent': 'Mozilla/5.0'})
@@ -147,16 +134,13 @@ def download_zip_fallback():
                         with z.open(file_info) as source, open(target_path, "wb") as target:
                             target.write(source.read())
 
-        print(" -> Successfully downloaded and extracted repository files!")
+        print(" -> Successfully downloaded and extracted files!")
     except Exception as e:
         raise RuntimeError(f"Failed to download repository archive: {e}")
 
 
 def sync_github_files():
-    """Clones/pulls repository via Git, repairs Winget/Git if needed, or falls back to ZIP."""
     print("[1/3] Checking repository files...")
-    
-    # 1. Existing Git repository -> Pull latest
     if os.path.exists(os.path.join(BASE_DIR, ".git")):
         print(" -> Existing Git repository found. Pulling latest updates...")
         try:
@@ -165,15 +149,12 @@ def sync_github_files():
             print(" -> Git executable not found on system path. Skipping pull.")
         return
 
-    # 2. Files exist locally -> Skip download
     app_py_path = os.path.join(BASE_DIR, "appfolder", "app.py")
     if os.path.exists(app_py_path):
         print(" -> Local files detected.")
         return
 
-    # 3. Missing files -> Check Git -> Install Git if needed -> Fallback to ZIP
     print(" -> Project files missing. Attempting download...")
-    
     git_installed = True
     try:
         subprocess.run(["git", "--version"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
@@ -191,14 +172,12 @@ def sync_github_files():
     download_zip_fallback()
 
 
-# --- 5. AUTOMATIC PIP LIBRARY INSTALLER ---
 def ensure_requirements(requirements_path):
-    """Checks and automatically installs missing Python libraries using pip."""
     if not os.path.exists(requirements_path):
         print(f" -> [Notice] {requirements_path} not found. Skipping library check.")
         return
 
-    print("[2/3] Checking and installing required Python libraries...")
+    print("[2/3] Checking required Python libraries...")
     with open(requirements_path, "r", encoding="utf-8") as f:
         packages = [line.strip() for line in f if line.strip() and not line.startswith("#")]
 
@@ -215,7 +194,6 @@ def ensure_requirements(requirements_path):
                 raise RuntimeError(f"Failed to auto-install package [{package}] via pip: {e}")
 
 
-# --- MAIN ENTRY POINT ---
 def main():
     run_as_admin()
     sync_github_files()
@@ -224,8 +202,6 @@ def main():
     ensure_requirements(req_path)
 
     print("[3/3] Launching Roblox Manager GUI...")
-    
-    # Import app module dynamically after setting sys.path
     from appfolder.app import launch
     launch()
 
@@ -233,11 +209,17 @@ def main():
 if __name__ == "__main__":
     try:
         main()
-        # Closes the console window automatically on successful run
+        # Automatically exit process and close console on normal GUI close
         sys.exit(0)
     except Exception as err:
+        # If console was hidden, restore it to show the error
+        try:
+            from appfolder.hidecmd import show_console
+            show_console()
+        except ImportError:
+            pass
+
         print(f"\n" + "=" * 50)
         print(f" ERROR DETECTED: {err}")
         print("=" * 50)
-        # Pauses window ONLY if an error occurred
         input("\nPress Enter to close this window...")
