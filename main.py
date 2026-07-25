@@ -3,19 +3,24 @@ import sys
 import ctypes
 import subprocess
 
+# --- CONFIGURATION ---
+GITHUB_REPO_URL = "https://github.com/Haikim6792/RobloxManager.git"
+BRANCH = "main"
+
+
 # --- 1. ADMIN AUTO-ELEVATION ---
 def is_admin():
-    """Checks if the script is currently running with Administrator privileges."""
+    """Checks if the script is running with Administrator privileges."""
     try:
         return ctypes.windll.shell32.IsUserAnAdmin()
     except Exception:
         return False
 
+
 def run_as_admin():
     """Relaunches the current script with Administrator privileges if needed."""
     if not is_admin():
         print("Requesting Administrator privileges...")
-        # Re-run the script with 'runas' verb to trigger Windows UAC
         script = os.path.abspath(sys.argv[0])
         params = ' '.join([f'"{arg}"' for arg in sys.argv[1:]])
         
@@ -23,38 +28,44 @@ def run_as_admin():
             None, "runas", sys.executable, f'"{script}" {params}', None, 1
         )
         
-        # If the user accepted UAC (ret > 32), exit this non-admin instance
         if ret > 32:
             sys.exit(0)
         else:
             print("Failed to acquire Admin privileges. Proceeding anyway...")
 
-# --- 2. GITHUB AUTO-UPDATE ---
-def update_from_github():
-    """Pulls the latest updates from the GitHub repository."""
-    print("[1/2] Checking for GitHub updates...")
-    try:
-        # Check if git is installed and repository exists
-        result = subprocess.run(
-            ["git", "pull", "origin", "main"],
-            capture_output=True,
-            text=True,
-            check=False
-        )
-        if result.returncode == 0:
-            print("Git update output:", result.stdout.strip())
-        else:
-            print("Git pull failed or directory is not a git repo. Skipping update.")
-    except FileNotFoundError:
-        print("Git is not installed on this system. Skipping auto-update.")
+
+# --- 2. AUTOMATIC FILE DOWNLOAD & SYNC ---
+def sync_github_files():
+    """Clones the repository if missing, or pulls updates if already present."""
+    print("[1/2] Checking repository files...")
+    
+    # Check if this directory is already a Git repository
+    if os.path.exists(".git"):
+        print("Existing repository found. Pulling latest updates...")
+        try:
+            subprocess.run(["git", "pull", "origin", BRANCH], check=False)
+        except FileNotFoundError:
+            print("Git is not installed. Skipping update.")
+    else:
+        print("Missing repository files. Cloning from GitHub...")
+        try:
+            # Clones all repository contents directly into the current folder
+            subprocess.run(["git", "clone", GITHUB_REPO_URL, "."], check=True)
+            print("Successfully downloaded repository files!")
+        except (subprocess.CalledProcessError, FileNotFoundError):
+            print("Error: Git is required to download the project files automatically.")
+            print("Please ensure Git is installed or clone the repository manually.")
+            sys.exit(1)
+
 
 # --- 3. REQUIREMENTS CHECKER ---
 def ensure_requirements(requirements_path):
-    """Checks and installs missing requirements automatically."""
+    """Checks and installs missing Python packages from requirements.txt."""
     if not os.path.exists(requirements_path):
+        print(f"Warning: {requirements_path} not found.")
         return
 
-    print("[2/2] Checking required packages...")
+    print("[2/2] Checking required Python packages...")
     with open(requirements_path, "r", encoding="utf-8") as f:
         packages = [line.strip() for line in f if line.strip() and not line.startswith("#")]
 
@@ -68,18 +79,20 @@ def ensure_requirements(requirements_path):
 
 # --- MAIN ENTRY POINT ---
 if __name__ == "__main__":
-    # Ensure Admin elevation first
+    # Ensure Admin elevation
     run_as_admin()
 
-    # Get path to appfolder/requirements.txt
+    # Sync files from GitHub (Clones if empty, pulls if already exists)
+    sync_github_files()
+
+    # Set path to appfolder/requirements.txt
     base_dir = os.path.dirname(os.path.abspath(__file__))
     req_path = os.path.join(base_dir, "appfolder", "requirements.txt")
 
-    # Sync code and check requirements
-    update_from_github()
+    # Ensure dependencies like psutil are installed
     ensure_requirements(req_path)
 
-    # Import and launch the UI from appfolder
+    # Launch the app
     print("Launching Roblox Manager...")
     from appfolder.app import launch
     launch()
