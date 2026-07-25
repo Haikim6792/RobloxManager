@@ -18,81 +18,98 @@ def is_admin():
 
 
 def run_as_admin():
-    """Relaunches the current script with Administrator privileges if needed."""
+    """Relaunches the script with Administrator privileges via Windows UAC if needed."""
     if not is_admin():
-        print("Requesting Administrator privileges...")
+        print("[+] Requesting Administrator privileges...")
         script = os.path.abspath(sys.argv[0])
         params = ' '.join([f'"{arg}"' for arg in sys.argv[1:]])
         
+        # Trigger UAC prompt
         ret = ctypes.windll.shell32.ShellExecuteW(
             None, "runas", sys.executable, f'"{script}" {params}', None, 1
         )
         
+        # If UAC was accepted (ret > 32), close this non-admin process
         if ret > 32:
             sys.exit(0)
         else:
-            print("Failed to acquire Admin privileges. Proceeding anyway...")
+            print("[!] Admin privileges denied. Some process actions may fail.")
 
 
 # --- 2. AUTOMATIC FILE DOWNLOAD & SYNC ---
 def sync_github_files():
     """Clones the repository if missing, or pulls updates if already present."""
-    print("[1/2] Checking repository files...")
+    print("[1/3] Checking repository files...")
     
-    # Check if this directory is already a Git repository
     if os.path.exists(".git"):
-        print("Existing repository found. Pulling latest updates...")
+        print(" -> Existing Git repository found. Pulling latest updates...")
         try:
             subprocess.run(["git", "pull", "origin", BRANCH], check=False)
         except FileNotFoundError:
-            print("Git is not installed. Skipping update.")
+            print(" -> [Notice] Git executable not found on system path. Skipping pull.")
     else:
-        print("Missing repository files. Cloning from GitHub...")
+        print(" -> Repository files missing. Cloning from GitHub...")
         try:
-            # Clones all repository contents directly into the current folder
             subprocess.run(["git", "clone", GITHUB_REPO_URL, "."], check=True)
-            print("Successfully downloaded repository files!")
-        except (subprocess.CalledProcessError, FileNotFoundError):
-            print("Error: Git is required to download the project files automatically.")
-            print("Please ensure Git is installed or clone the repository manually.")
-            sys.exit(1)
+            print(" -> Successfully downloaded repository files!")
+        except (subprocess.CalledProcessError, FileNotFoundError) as e:
+            raise RuntimeError(
+                f"Failed to clone repository from GitHub ({e}). "
+                "Ensure Git is installed and you have an active internet connection."
+            )
 
 
-# --- 3. REQUIREMENTS CHECKER ---
+# --- 3. AUTOMATIC PIP LIBRARY INSTALLER ---
 def ensure_requirements(requirements_path):
-    """Checks and installs missing Python packages from requirements.txt."""
+    """Checks and automatically installs missing Python libraries using pip."""
     if not os.path.exists(requirements_path):
-        print(f"Warning: {requirements_path} not found.")
+        print(f" -> [Notice] {requirements_path} not found. Skipping library check.")
         return
 
-    print("[2/2] Checking required Python packages...")
+    print("[2/3] Checking and installing required Python libraries...")
     with open(requirements_path, "r", encoding="utf-8") as f:
         packages = [line.strip() for line in f if line.strip() and not line.startswith("#")]
 
     for package in packages:
         try:
             __import__(package)
+            print(f" -> Package [{package}] is already installed.")
         except ImportError:
-            print(f"Installing missing package: [{package}]...")
-            subprocess.check_call([sys.executable, "-m", "pip", "install", package])
+            print(f" -> Installing missing library: [{package}] via pip...")
+            try:
+                subprocess.check_call([sys.executable, "-m", "pip", "install", package])
+                print(f" -> Successfully installed [{package}].")
+            except subprocess.CalledProcessError as e:
+                raise RuntimeError(f"Failed to auto-install package [{package}] via pip: {e}")
 
 
 # --- MAIN ENTRY POINT ---
-if __name__ == "__main__":
-    # Ensure Admin elevation
+def main():
+    # Step 1: Ensure Administrator privileges
     run_as_admin()
 
-    # Sync files from GitHub (Clones if empty, pulls if already exists)
+    # Step 2: Download/Sync files from GitHub
     sync_github_files()
 
-    # Set path to appfolder/requirements.txt
+    # Step 3: Automatically check and install pip dependencies
     base_dir = os.path.dirname(os.path.abspath(__file__))
     req_path = os.path.join(base_dir, "appfolder", "requirements.txt")
-
-    # Ensure dependencies like psutil are installed
     ensure_requirements(req_path)
 
-    # Launch the app
-    print("Launching Roblox Manager...")
+    # Step 4: Launch the GUI application
+    print("[3/3] Launching Roblox Manager GUI...")
     from appfolder.app import launch
     launch()
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except Exception as err:
+        print(f"\n" + "=" * 50)
+        print(f" ERROR DETECTED: {err}")
+        print("=" * 50)
+    finally:
+        # Prevents the command prompt / terminal from instantly closing
+        print("\nExecution finished.")
+        input("Press Enter to close this window...")
