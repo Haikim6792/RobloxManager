@@ -6,6 +6,13 @@ import urllib.request
 import zipfile
 import io
 
+# --- FIX WORKING DIRECTORY & IMPORT PATHS ---
+# Ensures relative paths and imports work even when launched as Administrator
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+os.chdir(BASE_DIR)
+if BASE_DIR not in sys.path:
+    sys.path.insert(0, BASE_DIR)
+
 # --- CONFIGURATION ---
 GITHUB_USER = "Haikim6792"
 REPO_NAME = "RobloxManager"
@@ -32,7 +39,7 @@ def run_as_admin():
         params = ' '.join([f'"{arg}"' for arg in sys.argv[1:]])
         
         ret = ctypes.windll.shell32.ShellExecuteW(
-            None, "runas", sys.executable, f'"{script}" {params}', None, 1
+            None, "runas", sys.executable, f'"{script}" {params}', BASE_DIR, 1
         )
         
         if ret > 32:
@@ -61,7 +68,6 @@ def install_or_repair_winget():
     """Downloads and installs/reinstalls Microsoft AppInstaller (winget) via PowerShell."""
     print(" -> Winget is missing or corrupted. Attempting automatic installation/repair...")
     
-    # Official Microsoft Winget package download URL
     winget_msix_url = "https://github.com/microsoft/winget-cli/releases/latest/download/Microsoft.DesktopAppInstaller_8wekyb3d8bbwe.msixbundle"
     temp_installer_path = os.path.join(os.environ.get("TEMP", "C:\\Windows\\Temp"), "winget_installer.msixbundle")
 
@@ -75,7 +81,6 @@ def install_or_repair_winget():
         ps_command = f'Add-AppxPackage -Path "{temp_installer_path}" -ForceApplicationShutdown'
         subprocess.run(["powershell", "-Command", ps_command], check=True)
         
-        # Cleanup installer file
         if os.path.exists(temp_installer_path):
             os.remove(temp_installer_path)
 
@@ -92,7 +97,6 @@ def install_or_repair_winget():
 def try_install_git():
     """Ensures Winget is working, then uses Winget to install Git."""
     if not is_winget_working():
-        # Try to repair or install winget first
         if not install_or_repair_winget():
             return False
 
@@ -107,7 +111,6 @@ def try_install_git():
         subprocess.run(cmd, check=True)
         print(" -> Git installed successfully!")
         
-        # Add default Git path to PATH environment variable for the current process
         git_path = r"C:\Program Files\Git\cmd"
         if git_path not in os.environ["PATH"]:
             os.environ["PATH"] += f";{git_path}"
@@ -136,7 +139,7 @@ def download_zip_fallback():
                     if not relative_path:
                         continue
                     
-                    target_path = os.path.join(".", relative_path)
+                    target_path = os.path.join(BASE_DIR, relative_path)
                     if file_info.is_dir():
                         os.makedirs(target_path, exist_ok=True)
                     else:
@@ -154,7 +157,7 @@ def sync_github_files():
     print("[1/3] Checking repository files...")
     
     # 1. Existing Git repository -> Pull latest
-    if os.path.exists(".git"):
+    if os.path.exists(os.path.join(BASE_DIR, ".git")):
         print(" -> Existing Git repository found. Pulling latest updates...")
         try:
             subprocess.run(["git", "pull", "origin", BRANCH], check=False)
@@ -163,11 +166,12 @@ def sync_github_files():
         return
 
     # 2. Files exist locally -> Skip download
-    if os.path.exists("appfolder") and os.path.exists(os.path.join("appfolder", "app.py")):
+    app_py_path = os.path.join(BASE_DIR, "appfolder", "app.py")
+    if os.path.exists(app_py_path):
         print(" -> Local files detected.")
         return
 
-    # 3. Missing files -> Check Git -> Repair Winget & Install Git if needed -> Fallback to ZIP
+    # 3. Missing files -> Check Git -> Install Git if needed -> Fallback to ZIP
     print(" -> Project files missing. Attempting download...")
     
     git_installed = True
@@ -184,7 +188,6 @@ def sync_github_files():
         except subprocess.CalledProcessError:
             print(" -> Git clone failed. Falling back to direct ZIP download...")
 
-    # Direct ZIP fallback if Git or Winget couldn't complete the setup
     download_zip_fallback()
 
 
@@ -217,11 +220,12 @@ def main():
     run_as_admin()
     sync_github_files()
 
-    base_dir = os.path.dirname(os.path.abspath(__file__))
-    req_path = os.path.join(base_dir, "appfolder", "requirements.txt")
+    req_path = os.path.join(BASE_DIR, "appfolder", "requirements.txt")
     ensure_requirements(req_path)
 
     print("[3/3] Launching Roblox Manager GUI...")
+    
+    # Import app module dynamically after setting sys.path
     from appfolder.app import launch
     launch()
 
@@ -229,10 +233,11 @@ def main():
 if __name__ == "__main__":
     try:
         main()
+        # Closes the console window automatically on successful run
+        sys.exit(0)
     except Exception as err:
         print(f"\n" + "=" * 50)
         print(f" ERROR DETECTED: {err}")
         print("=" * 50)
-    finally:
-        print("\nExecution finished.")
-        input("Press Enter to close this window...")
+        # Pauses window ONLY if an error occurred
+        input("\nPress Enter to close this window...")
