@@ -2,10 +2,17 @@ import os
 import sys
 import ctypes
 import subprocess
+import urllib.request
+import zipfile
+import io
 
 # --- CONFIGURATION ---
-GITHUB_REPO_URL = "https://github.com/Haikim6792/RobloxManager.git"
+GITHUB_USER = "Haikim6792"
+REPO_NAME = "RobloxManager"
 BRANCH = "main"
+
+GITHUB_REPO_URL = f"https://github.com/{GITHUB_USER}/{REPO_NAME}.git"
+ZIP_URL = f"https://github.com/{GITHUB_USER}/{REPO_NAME}/archive/refs/heads/{BRANCH}.zip"
 
 
 # --- 1. ADMIN AUTO-ELEVATION ---
@@ -24,12 +31,10 @@ def run_as_admin():
         script = os.path.abspath(sys.argv[0])
         params = ' '.join([f'"{arg}"' for arg in sys.argv[1:]])
         
-        # Trigger UAC prompt
         ret = ctypes.windll.shell32.ShellExecuteW(
             None, "runas", sys.executable, f'"{script}" {params}', None, 1
         )
         
-        # If UAC was accepted (ret > 32), close this non-admin process
         if ret > 32:
             sys.exit(0)
         else:
@@ -37,8 +42,42 @@ def run_as_admin():
 
 
 # --- 2. AUTOMATIC FILE DOWNLOAD & SYNC ---
+def download_zip_fallback():
+    """Downloads repository as a ZIP archive if Git is not installed."""
+    print(" -> Git not found. Downloading repository archive directly...")
+    try:
+        # Download ZIP into memory
+        req = urllib.request.Request(ZIP_URL, headers={'User-Agent': 'Mozilla/5.0'})
+        with urllib.request.urlopen(req) as response:
+            zip_data = response.read()
+
+        # Extract ZIP contents to the current folder
+        print(" -> Extracting files...")
+        with zipfile.ZipFile(io.BytesIO(zip_data)) as z:
+            # GitHub ZIP archives wrap contents in 'RepoName-branch/' folder
+            root_prefix = f"{REPO_NAME}-{BRANCH}/"
+            for file_info in z.infolist():
+                if file_info.filename.startswith(root_prefix):
+                    # Remove the folder prefix so files unpack into the root directory
+                    relative_path = file_info.filename[len(root_prefix):]
+                    if not relative_path:
+                        continue
+                    
+                    target_path = os.path.join(".", relative_path)
+                    if file_info.is_dir():
+                        os.makedirs(target_path, exist_ok=True)
+                    else:
+                        os.makedirs(os.path.dirname(target_path), exist_ok=True)
+                        with z.open(file_info) as source, open(target_path, "wb") as target:
+                            target.write(source.read())
+
+        print(" -> Successfully downloaded and extracted repository files!")
+    except Exception as e:
+        raise RuntimeError(f"Failed to download repository archive: {e}")
+
+
 def sync_github_files():
-    """Clones the repository if missing, or pulls updates if already present."""
+    """Clones/pulls repository via Git, or falls back to direct ZIP download."""
     print("[1/3] Checking repository files...")
     
     if os.path.exists(".git"):
@@ -46,17 +85,17 @@ def sync_github_files():
         try:
             subprocess.run(["git", "pull", "origin", BRANCH], check=False)
         except FileNotFoundError:
-            print(" -> [Notice] Git executable not found on system path. Skipping pull.")
+            print(" -> Git not installed. Skipping git pull.")
+    elif os.path.exists("appfolder") and os.path.exists(os.path.join("appfolder", "app.py")):
+        print(" -> Local files detected.")
     else:
-        print(" -> Repository files missing. Cloning from GitHub...")
+        print(" -> Project files missing. Attempting download...")
         try:
             subprocess.run(["git", "clone", GITHUB_REPO_URL, "."], check=True)
-            print(" -> Successfully downloaded repository files!")
-        except (subprocess.CalledProcessError, FileNotFoundError) as e:
-            raise RuntimeError(
-                f"Failed to clone repository from GitHub ({e}). "
-                "Ensure Git is installed and you have an active internet connection."
-            )
+            print(" -> Successfully cloned repository via Git!")
+        except (subprocess.CalledProcessError, FileNotFoundError):
+            # Fall back to downloading ZIP via Python if Git is missing/fails
+            download_zip_fallback()
 
 
 # --- 3. AUTOMATIC PIP LIBRARY INSTALLER ---
@@ -85,18 +124,13 @@ def ensure_requirements(requirements_path):
 
 # --- MAIN ENTRY POINT ---
 def main():
-    # Step 1: Ensure Administrator privileges
     run_as_admin()
-
-    # Step 2: Download/Sync files from GitHub
     sync_github_files()
 
-    # Step 3: Automatically check and install pip dependencies
     base_dir = os.path.dirname(os.path.abspath(__file__))
     req_path = os.path.join(base_dir, "appfolder", "requirements.txt")
     ensure_requirements(req_path)
 
-    # Step 4: Launch the GUI application
     print("[3/3] Launching Roblox Manager GUI...")
     from appfolder.app import launch
     launch()
@@ -110,6 +144,5 @@ if __name__ == "__main__":
         print(f" ERROR DETECTED: {err}")
         print("=" * 50)
     finally:
-        # Prevents the command prompt / terminal from instantly closing
         print("\nExecution finished.")
         input("Press Enter to close this window...")
