@@ -1,5 +1,9 @@
 # RobloxManager
 
+Tắt Time Limit Roblox
+
+Turn off Roblox Time Limit
+
 # Install
 
 https://www.python.org/downloads/
